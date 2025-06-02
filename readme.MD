@@ -1,0 +1,7 @@
+get_url_jyxx.py 
+    读取某一期刊的所有文章的url，
+    并保存到jyxx_final_urls.json中
+get_content.py 
+    读取生成的jyxx_final_urls.json，
+    所有url对应的内容的文章内容，
+    保存到craw_results_xxxx文件夹中

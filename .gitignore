@@ -1,0 +1,78 @@
+# ===== Python编译文件 =====
+__pycache__/       # Python字节码缓存目录
+*.py[cod]          # 编译生成的.pyc/.pyo文件
+*$py.class          # Jython编译文件
+*.pyd               # Windows动态链接库
+*.so                # Linux动态链接库
+
+# ===== 虚拟环境 =====
+venv/               # 虚拟环境目录（常见命名）
+.env/               # 环境变量目录
+.venv/              # 常见虚拟环境命名
+env/                # 虚拟环境简写
+ENV/                # 大写虚拟环境目录
+env.bak/            # 环境备份目录
+venv.bak/           # 虚拟环境备份
+pythonenv/          # 其他可能的环境目录
+
+# ===== 包构建与分发 =====
+build/              # 构建输出目录
+dist/               # 分发包目录
+*.egg-info/         # 包元数据
+*.egg               # 旧版包格式
+.installed.cfg      # 安装配置
+pip-wheel-metadata/ # pip缓存
+wheels/             # wheel包目录
+develop-eggs/       # 开发阶段包
+eggs/               # setuptools生成目录
+parts/              # 组件目录
+sdist/              # 源码分发目录
+var/                # 变量数据
+
+# ===== 开发工具文件 =====
+# IDE配置
+.vscode/            # VS Code配置
+.idea/              # PyCharm配置
+.spyderproject      # Spyder项目文件
+.spyproject         # Spyder配置文件
+.ropeproject        # Rope重构工具配置
+
+# 文档生成
+docs/_build/        # Sphinx文档输出
+site/               # MkDocs输出目录
+
+# ===== 测试与覆盖率 =====
+.coverage           # 覆盖率数据
+.coverage.*         # 覆盖率缓存
+.cache/             # 测试缓存
+.nox/               # Nox测试环境
+.tox/               # Tox测试环境
+htmlcov/            # HTML覆盖率报告
+.pytest_cache/      # Pytest缓存
+nosetests.xml       # Nose测试报告
+coverage.xml        # XML覆盖率报告
+
+# ===== 日志与临时文件 =====
+*.log               # 应用日志
+*.tmp               # 临时文件
+*.swp               # Vim交换文件
+pip-log.txt         # pip安装日志
+pip-delete-this-directory.txt # pip临时标记
+
+# ===== 操作系统文件 =====
+.DS_Store           # macOS属性文件
+Thumbs.db           # Windows缩略图缓存
+Desktop.ini         # Windows文件夹配置
+
+# ===== 环境配置文件 =====
+.env                # 环境变量文件（含敏感信息）
+local_settings.py   # 本地Django配置
+secrets.json        # 密钥文件
+
+# ===== 数据库文件 =====
+*.sqlite3           # SQLite数据库
+*.sqlite3-journal   # SQLite日志
+*.db                # 通用数据库文件
+
+# ===== Jupyter Notebook =====
+.ipynb_checkpoints/ # Notebook检查点

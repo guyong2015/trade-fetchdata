@@ -1,0 +1,27 @@
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Multiple Onclick Links</title>
+        <script>
+            function openurl(target_path) {
+                // 这是一个模拟的跳转逻辑，根据传入的 target_path 构建 URL
+                // window.location.href =  target_path;
+                window.open("http://www." + target_path, '_blank', 'noreferrer');
+
+            //     const newWindow = window.open('', '_blank');
+            //     if (newWindow) {
+            //         newWindow.location.href = "http://www." + target_path;
+            //     } else {
+            //         alert('请允许浏览器弹出窗口！');
+            //     }
+            }
+        </script>
+    </head>
+    <body>
+        <h1>Clickable Links:</h1>
+        <a id="link1" onclick="openurl('baidu.com')">Go to Page 1</a><br>
+        <a id="link1" onclick="openurl('163.com')">Go to Page 2</a><br>
+        <a id="link1" onclick="openurl('sohu.com')">Details Page</a><br>
+        <p>This is some other content on the page.</p>
+    </body>
+    </html>
