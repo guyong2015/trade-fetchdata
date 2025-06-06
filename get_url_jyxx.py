@@ -252,6 +252,7 @@ def save_urls_to_json(urls, filename="jyxx_final_urls.json"):
         # 准备要保存的数据
         data = {
             "metadata": {
+                "timebegin": timebegin,
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "total_count": total_count,
                 "success_count": success_count,
@@ -310,13 +311,14 @@ def print_summary(urls):
 # 使用示例
 if __name__ == "__main__":
     target_url = "https://www.cqggzy.com/jyxx/transaction_detail.html"
+    # target_url = "https://www.cqggzy.com/jyjg/transaction_detail.html"
     # max_pages: 最大处理页数，翻多少页
-    max_pages = 10
+    max_pages = 500
     print("🚀 开始获取URLs并跟踪重定向...")
     print(f"🎯 目标URL: {target_url}")
     print(f"📄 将处理前{max_pages}页数据")
     print("-" * 80)
-    
+    timebegin = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     # 获取所有URL及其重定向信息
     urls = get_all_popup_urls_with_redirect(target_url, max_pages)
     
@@ -333,4 +335,31 @@ if __name__ == "__main__":
     else:
         print("💥 没有获取到任何URL数据")
     
-    print("\n🏁 程序执行完成！")
+    print("\n🏁 程序执行完成！公告")
+    
+    # target_url = "https://www.cqggzy.com/jyxx/transaction_detail.html"
+    target_url = "https://www.cqggzy.com/jyjg/transaction_detail.html"
+    # max_pages: 最大处理页数，翻多少页
+    max_pages = 500
+    print("🚀 开始获取URLs并跟踪重定向...")
+    print(f"🎯 目标URL: {target_url}")
+    print(f"📄 将处理前{max_pages}页数据")
+    print("-" * 80)
+    timebegin = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # 获取所有URL及其重定向信息
+    urls = get_all_popup_urls_with_redirect(target_url, max_pages)
+    
+    if urls:
+        # 打印摘要
+        print_summary(urls)
+        
+        # 保存到JSON文件
+        save_success = save_urls_to_json(urls, "jyjg_final_urls.json")
+        if save_success:
+            print("🎉 数据已成功保存到 jyxx_final_urls.json")
+        else:
+            print("💥 保存数据失败")
+    else:
+        print("💥 没有获取到任何URL数据")
+    
+    print("\n🏁 程序执行完成！结果")

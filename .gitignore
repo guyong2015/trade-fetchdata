@@ -76,3 +76,6 @@ secrets.json        # 密钥文件
 
 # ===== Jupyter Notebook =====
 .ipynb_checkpoints/ # Notebook检查点
+# ===== 其他 ==========git rm -r --cached ​crawl_re*/
+#git commit -m "停止跟踪 crawl_re 目录"
+crawl_results*/

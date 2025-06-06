@@ -1,3 +1,6 @@
+关闭360
+关闭360
+关闭360
 get_url_jyxx.py 
     读取某一期刊的所有文章的url，
     并保存到jyxx_final_urls.json中

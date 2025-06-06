@@ -176,3 +176,7 @@ all_urls.append(new_url)
 
 [{'source': '第 5 页第 19 个元素', 'name': '重庆市南岸区天台岗小学校南湖校区教学辅助用房改建工程', 'url': 'https://www.cqggzy.com/jumpnew.html?infoid=42507af7-fd56-431e-ac80-5beebef1b457&categorynum=004002009001'},
 元素 100: {'source': '第 5 页第 20 个元素', 'name': '江北区大石坝组团K12-4号地块项目(二期)限价编制', 'url': 'https://www.cqggzy.com/jumpnew.html?infoid=33384b19-647c-4949-8358-bb3b888331b4&categorynum=004002004001'}]
+
+git config  user.name "guyong2015"
+git config  user.email "guyong2015@gmail.com"
+过程中存贮
