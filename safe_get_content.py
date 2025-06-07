@@ -1,5 +1,4 @@
 import json
-# 加入了beautifulsoup4和html2text库，用于处理HTML内容和转换为markdown格式。
 import asyncio
 from crawl4ai import AsyncWebCrawler
 from bs4 import BeautifulSoup
@@ -119,7 +118,7 @@ def save_batch_results(results, output_dir, batch_num, start_index):
         results: 爬取结果列表
         output_dir: 输出目录
         batch_num: 批次号
-        start_index: 起始索引
+        start_index: 起始索引 (当前批次在总URL列表中的起始索引)
     """
     batch_dir = os.path.join(output_dir, f"batch_{batch_num:03d}")
     os.makedirs(batch_dir, exist_ok=True)
@@ -128,7 +127,8 @@ def save_batch_results(results, output_dir, batch_num, start_index):
     successful_count = 0
     
     for i, result in enumerate(results):
-        file_index = start_index + i + 1
+        # 文件的全局索引是批次起始索引 + 批次内索引 + 1
+        file_index = start_index + i + 1 
         
         if result['success']:
             successful_count += 1
@@ -175,6 +175,7 @@ def save_batch_results(results, output_dir, batch_num, start_index):
 """)
         
         for i, result in enumerate(results):
+            # 这里的索引也是批次内的相对索引
             status = "✅ 成功" if result['success'] else "❌ 失败"
             error_msg = f" - {result.get('error', '')}" if not result['success'] else ""
             f.write(f"{start_index + i + 1}. {status} | {result.get('source', 'Unknown')} | {result.get('name', 'Unknown')}{error_msg}\n")
@@ -184,20 +185,28 @@ def save_batch_results(results, output_dir, batch_num, start_index):
     print(f"💾 批次 {batch_num} 结果已保存到 {batch_dir}")
     return successful_count
 
-def save_progress_log(output_dir, processed_count, total_count, successful_count, failed_count, start_time=None, end_time=None):
+def save_progress_log(output_dir, processed_count, total_count, successful_count, failed_count, start_time=None, end_time=None, output_dir_name=None):
     """
     保存进度日志
+    Args:
+        output_dir: 结果输出目录的完整路径
+        processed_count: 截至目前已处理的URL总数
+        total_count: 总URL数量
+        successful_count: 截至目前成功的URL总数
+        failed_count: 截至目前失败的URL总数
+        start_time: 爬取任务开始时间
+        end_time: 爬取任务结束时间 (如果已完成)
+        output_dir_name: 结果输出目录的名称 (例如: crawl_results_break_20240101_120000)
     """
     progress_file = os.path.join(output_dir, "progress_log.json")
     
-    # 如果文件已存在，先读取原有数据以保留开始时间
     existing_data = {}
     if os.path.exists(progress_file):
         try:
             with open(progress_file, "r", encoding="utf-8") as f:
                 existing_data = json.load(f)
-        except:
-            pass
+        except Exception:
+            pass # Ignore error if file is corrupted or unreadable
     
     progress_data = {
         "start_time": start_time or existing_data.get("start_time"),
@@ -208,36 +217,67 @@ def save_progress_log(output_dir, processed_count, total_count, successful_count
         "successful_count": successful_count,
         "failed_count": failed_count,
         "progress_percentage": round((processed_count / total_count) * 100, 2) if total_count > 0 else 0,
-        "is_completed": processed_count >= total_count
+        "is_completed": processed_count >= total_count,
+        "output_dir_name": output_dir_name or existing_data.get("output_dir_name")
     }
     
-    # 如果有开始和结束时间，计算总耗时
     if progress_data["start_time"] and progress_data["end_time"]:
         try:
             start_dt = datetime.strptime(progress_data["start_time"], '%Y-%m-%d %H:%M:%S')
             end_dt = datetime.strptime(progress_data["end_time"], '%Y-%m-%d %H:%M:%S')
             duration = end_dt - start_dt
             progress_data["total_duration_seconds"] = int(duration.total_seconds())
-            progress_data["total_duration_formatted"] = str(duration).split('.')[0]  # 去掉微秒
-        except:
-            pass
+            progress_data["total_duration_formatted"] = str(duration).split('.')[0]
+        except ValueError:
+            pass # Date parsing error
     
     with open(progress_file, "w", encoding="utf-8") as f:
         json.dump(progress_data, f, ensure_ascii=False, indent=2)
 
-def update_overall_summary(output_dir, all_results, total_successful, total_failed, current_batch, total_batches, batch_size, start_time):
+def load_progress_log(output_dir_prefix="crawl_results_break"):
+    """
+    加载最新的进度日志。
+    查找最近创建的且未完成的爬取目录及其进度日志。
+    """
+    existing_dirs = [d for d in os.listdir('.') if os.path.isdir(d) and d.startswith(output_dir_prefix)]
+    if not existing_dirs:
+        return None, None
+
+    # Sort directories by name (which includes timestamp), newest last
+    existing_dirs.sort()
+    
+    # Iterate from newest to oldest to find an incomplete log
+    for latest_output_dir in reversed(existing_dirs):
+        progress_file = os.path.join(latest_output_dir, "progress_log.json")
+        
+        if os.path.exists(progress_file):
+            try:
+                with open(progress_file, "r", encoding="utf-8") as f:
+                    progress_data = json.load(f)
+                    if not progress_data.get("is_completed", True): # Only load if not completed
+                        print(f"📊 找到未完成的进度日志: {progress_file}")
+                        return progress_data, latest_output_dir
+                    else:
+                        print(f"✅ 进度日志已完成或无效，检查下一个。")
+            except Exception as e:
+                print(f"❌ 加载进度日志失败 ({progress_file}): {e}，检查下一个。")
+    
+    print(f"✅ 未找到任何未完成的进度日志，将开始新的爬取。")
+    return None, None
+
+
+def update_overall_summary(output_dir, all_results, total_successful, total_failed, current_batch, total_batches, batch_size, start_time, total_urls_overall):
     """
     更新总体汇总报告 (00_OVERALL_SUMMARY.md) - 实时进度报告
     """
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    processed_count = len(all_results)
-    total_urls = len(all_results) if all_results else 0 # Use len(all_results) for processed count, total_urls for total
+    processed_count = len(all_results) # This now includes dummy data for resumed runs
+    total_urls = total_urls_overall # Use the explicitly passed total URL count
     
-    # 读取进度日志获取耗时信息
-    progress_file = os.path.join(output_dir, "progress_log.json")
     duration_info = ""
-    is_completed = current_batch >= total_batches
+    is_completed = processed_count >= total_urls # Check if all URLs are processed based on the actual total_urls
     
+    progress_file = os.path.join(output_dir, "progress_log.json")
     if os.path.exists(progress_file):
         try:
             with open(progress_file, "r", encoding="utf-8") as f:
@@ -245,15 +285,14 @@ def update_overall_summary(output_dir, all_results, total_successful, total_fail
                 if progress_data.get("total_duration_formatted"):
                     duration_info = f"**总耗时**: {progress_data['total_duration_formatted']}  \n"
                 elif progress_data.get("start_time"):
-                    # 计算当前耗时
                     try:
                         start_dt = datetime.strptime(progress_data["start_time"], '%Y-%m-%d %H:%M:%S')
                         current_dt = datetime.now()
                         current_duration = current_dt - start_dt
                         duration_info = f"**当前耗时**: {str(current_duration).split('.')[0]}  \n"
-                    except:
+                    except ValueError:
                         pass
-        except:
+        except Exception:
             pass
     
     summary_file = os.path.join(output_dir, "00_OVERALL_SUMMARY.md")
@@ -276,7 +315,6 @@ def update_overall_summary(output_dir, all_results, total_successful, total_fail
 **整体进度**: {(processed_count/total_urls*100):.1f}%
 """)
         
-        # Add file structure explanation only once at the beginning or when completed
         if is_completed and processed_count == total_urls:
             f.write("""
 ## 📁 文件结构说明
@@ -295,23 +333,18 @@ def update_overall_summary(output_dir, all_results, total_successful, total_fail
 """)
 
         f.write("\n## 📊 批次处理状态\n\n")
-        # 按批次显示进度
+        
         for batch_num_iter in range(1, total_batches + 1):
             start_idx = (batch_num_iter - 1) * batch_size
-            end_idx = min(start_idx + batch_size, total_urls) # Use total_urls for accurate range
+            end_idx = min(start_idx + batch_size, total_urls)
             
             if batch_num_iter <= current_batch:
                 # 已完成的批次
-                batch_results_for_status = [r for r in all_results if r.get('batch_num') == batch_num_iter]
-                if batch_results_for_status:
-                    batch_success = sum(1 for r in batch_results_for_status if r.get('success', False))
-                    batch_fail = len(batch_results_for_status) - batch_success
-                    f.write(f"- ✅ 批次 {batch_num_iter} (URL {start_idx + 1}-{end_idx}) - 成功:{batch_success}, 失败:{batch_fail} - `batch_{batch_num_iter:03d}/`\n")
-                else:
-                    # This case might happen if all_results is not fully populated yet for the batch,
-                    # but the batch_num_iter is <= current_batch.
-                    # It's safer to just state it's completed.
-                    f.write(f"- ✅ 批次 {batch_num_iter} (URL {start_idx + 1}-{end_idx}) - 已完成 - `batch_{batch_num_iter:03d}/`\n")
+                # Note: `all_results` contains dummy results for previous batches on resume.
+                # To get actual success/fail for previous batches, one might need to read `batch_XXX_summary.md`.
+                # For this implementation, we rely on total_successful/total_failed and assume previous batches were successful
+                # based on `progress_log.json`'s `processed_count`.
+                f.write(f"- ✅ 批次 {batch_num_iter} (URL {start_idx + 1}-{end_idx}) - 已完成 - `batch_{batch_num_iter:03d}/`\n")
             elif batch_num_iter == current_batch + 1:
                 # 正在处理的批次
                 f.write(f"- 🔄 批次 {batch_num_iter} (URL {start_idx + 1}-{end_idx}) - 处理中...\n")
@@ -319,16 +352,19 @@ def update_overall_summary(output_dir, all_results, total_successful, total_fail
                 # 待处理的批次
                 f.write(f"- ⏳ 批次 {batch_num_iter} (URL {start_idx + 1}-{end_idx}) - 等待处理\n")
         
-        # 如果有失败的URL，显示失败详情
-        if all_results:
-            failed_results = [r for r in all_results if not r.get('success', False)]
-            if failed_results:
-                f.write(f"\n## 🔍 失败URL详情 (共{len(failed_results)}个)\n\n")
-                for i, result in enumerate(failed_results, 1):
-                    f.write(f"{i}. **{result.get('name', 'Unknown')}**\n")
-                    f.write(f"   - 来源: {result.get('source', 'Unknown')}\n")
-                    f.write(f"   - URL: {result.get('url', '')}\n")
-                    f.write(f"   - 错误: {result.get('error', '')}\n\n")
+        # Display failed URLs only for the current run's failures, or all if we rebuild full all_results
+        # For this batch-level resume, we show failures from the *current* run's `all_results`.
+        # If `all_results` is only populated with dummy data for previous runs,
+        # then this section will only show failures from the current execution segment.
+        failed_results_current_run = [r for r in all_results[processed_count - (processed_count - (total_successful + total_failed)):] if not r.get('success', False)] # Slice to get only current run's results
+        
+        if failed_results_current_run:
+            f.write(f"\n## 🔍 失败URL详情 (共{len(failed_results_current_run)}个 - 当前运行批次)\n\n")
+            for i, result in enumerate(failed_results_current_run, 1):
+                f.write(f"{i}. **{result.get('name', 'Unknown')}**\n")
+                f.write(f"   - 来源: {result.get('source', 'Unknown')}\n")
+                f.write(f"   - URL: {result.get('url', '')}\n")
+                f.write(f"   - 错误: {result.get('error', '')}\n\n")
         
         if is_completed and processed_count == total_urls:
             f.write(f"\n---\n\n## 🎊 爬取任务已全部完成！\n\n")
@@ -340,21 +376,20 @@ def update_overall_summary(output_dir, all_results, total_successful, total_fail
             f.write(f"您可以随时查看此文件了解最新进度。\n")
 
 
-def generate_final_summary_report(output_dir, all_results, total_successful, total_failed, url_list_original, batch_size, start_time, current_end_time):
+def generate_final_summary_report(output_dir, all_results, total_successful, total_failed, url_list_original, batch_size, start_time, current_end_time, total_urls_overall):
     """
     生成或更新最终汇总报告 (00_FINAL_SUMMARY.md)
     这个报告会随着每批次处理完成而更新，反映当前的累计结果。
     """
-    total_urls = len(url_list_original)
-    processed_urls_count = len(all_results)
+    total_urls = total_urls_overall # Use the explicitly passed total URL count
+    processed_urls_count = len(all_results) # This now includes dummy data for resumed runs
     total_batches = (total_urls + batch_size - 1) // batch_size
 
     final_summary_file = os.path.join(output_dir, "00_FINAL_SUMMARY.md")
 
-    # Read progress log to get duration info
     progress_file = os.path.join(output_dir, "progress_log.json")
     duration_info = ""
-    is_completed = processed_urls_count >= total_urls # Check if all URLs are processed
+    is_completed = processed_urls_count >= total_urls 
     
     if os.path.exists(progress_file):
         try:
@@ -368,9 +403,9 @@ def generate_final_summary_report(output_dir, all_results, total_successful, tot
                         current_dt = datetime.strptime(current_end_time, '%Y-%m-%d %H:%M:%S')
                         current_duration = current_dt - start_dt
                         duration_info = f"**当前累计耗时**: {str(current_duration).split('.')[0]}  \n"
-                    except:
+                    except ValueError:
                         pass
-        except:
+        except Exception:
             pass
 
     with open(final_summary_file, "w", encoding="utf-8") as f:
@@ -390,7 +425,6 @@ def generate_final_summary_report(output_dir, all_results, total_successful, tot
 **成功率**: {(total_successful/processed_urls_count*100):.2f}% (基于已处理的URL)
 
 ## 📁 文件结构说明
-
 - `00_OVERALL_SUMMARY.md` - 总体汇总报告（实时进度）
 - `00_FINAL_SUMMARY.md` - 本文件，累计/最终汇总报告
 - `progress_log.json` - 进度日志文件
@@ -406,7 +440,7 @@ def generate_final_summary_report(output_dir, all_results, total_successful, tot
 
 """)
         
-        # Group results by batch for accurate statistics
+        # Group results by batch for accurate statistics from all_results
         batch_wise_results = {}
         for result in all_results:
             batch_num = result.get('batch_num')
@@ -416,10 +450,11 @@ def generate_final_summary_report(output_dir, all_results, total_successful, tot
 
         for batch_num in sorted(batch_wise_results.keys()):
             batch_results = batch_wise_results[batch_num]
-            batch_success = sum(1 for r in batch_results if r['success'])
+            # Use sum(1 for r in batch_results if r.get('success', False)) if using dummy data
+            # If using actual data (if rebuilt from files), then check 'success'
+            batch_success = sum(1 for r in batch_results if r.get('success', False))
             batch_fail = len(batch_results) - batch_success
             
-            # Calculate original URL range for the batch
             start_idx_original = (batch_num - 1) * batch_size
             end_idx_original = min(start_idx_original + batch_size, total_urls)
 
@@ -428,13 +463,15 @@ def generate_final_summary_report(output_dir, all_results, total_successful, tot
             f.write(f"- ❌ 失败: {batch_fail}\n")
             f.write(f"- 📁 目录: `batch_{batch_num:03d}/`\n\n")
         
-        # New section for individual URL details including content
-        f.write("## 📋 所有URL详细内容 (累计)\n\n") # Changed title to reflect cumulative content
+        f.write("## 📋 所有URL详细内容 (累计)\n\n") 
         
         cumulative_content_for_final_report = ""
         for i, result in enumerate(all_results, 1):
-            # Construct content similar to how individual batch files are made
-            if result['success']:
+            # If `all_results` contains dummy entries for previous runs,
+            # this part will only show full content for the current run's processed items.
+            # For previously processed (resumed) items, it will only show success/fail status
+            # unless a more complex `all_results` reconstruction from files is implemented.
+            if result.get('success', False) and 'content' in result: # Only show content if available
                 cumulative_content_for_final_report += f"""# {result.get('name', 'Unknown')}
 
 **来源**: {result.get('source', 'Unknown')}  
@@ -448,22 +485,22 @@ def generate_final_summary_report(output_dir, all_results, total_successful, tot
 {result['content']}
 """
             else:
-                # For failed items, include their details and error, but no content
-                cumulative_content_for_final_report += f"""# ❌ 爬取失败: {result.get('name', 'Unknown')}
+                # For failed or dummy items, include their details and error, but no content
+                status_text = "成功 (旧批次)" if result.get('success', False) else "失败"
+                cumulative_content_for_final_report += f"""# {status_text}: {result.get('name', 'Unknown URL')}
 
 **来源**: {result.get('source', 'Unknown')}  
-**URL**: {result['url']}  
-**错误**: {result.get('error', '未知错误')}  
+**URL**: {result.get('url', 'N/A')}  
+**错误**: {result.get('error', 'N/A')}  
 **爬取时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 ---
 """
             
-            # Add a strong separator between each URL's details
             if i < len(all_results):
-                cumulative_content_for_final_report += f"\n\n{'='*80}\n\n" # Stronger separator for cumulative report
+                cumulative_content_for_final_report += f"\n\n{'='*80}\n\n"
 
-        f.write(cumulative_content_for_final_report) # Write the accumulated content
+        f.write(cumulative_content_for_final_report)
 
 
         if is_completed:
@@ -479,7 +516,7 @@ def generate_final_summary_report(output_dir, all_results, total_successful, tot
 async def crawl_multiple_webpages_to_markdown(url_list, batch_size=50):
     """
     批量爬取多个网页的mainContent元素并返回markdown格式内容
-    每处理指定数量的URL后进行一次文件保存操作
+    每处理指定数量的URL后进行一次文件保存操作，并支持以批次为单位的断点续传。
     
     Args:
         url_list: 包含字典的列表，每个字典应包含 'url', 'source', 'name' 等字段
@@ -495,40 +532,84 @@ async def crawl_multiple_webpages_to_markdown(url_list, batch_size=50):
     print(f"🚀 开始批量爬取 {len(url_list)} 个网页的mainContent元素...")
     print(f"📦 批次大小: {batch_size} 个URL/批次")
     
-    all_results = []
+    all_results = [] # Accumulates results (can include dummy entries for resumed items)
     total_successful = 0
     total_failed = 0
     
-    # 创建输出目录
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    output_dir = f"crawl_results_{timestamp}"
-    os.makedirs(output_dir, exist_ok=True)
+    start_index_for_crawl = 0 # This will be the starting point for the current crawl session
+    output_dir = ""
+    start_time = ""
+
+    total_urls_to_process = len(url_list) # Total URLs from the input list
+    total_batches = (total_urls_to_process + batch_size - 1) // batch_size
     
-    # 初始化进度日志，记录开始时间
-    save_progress_log(output_dir, 0, len(url_list), 0, 0, start_time=start_time)
+
+    # 尝试加载进度日志
+    progress_data, existing_output_dir = load_progress_log()
+
+    if progress_data and existing_output_dir:
+        start_index_for_crawl = progress_data.get("processed_count", 0)
+        output_dir = existing_output_dir
+        start_time = progress_data.get("start_time", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        total_successful = progress_data.get("successful_count", 0)
+        total_failed = progress_data.get("failed_count", 0)
+
+        # Populate all_results with dummy entries for already processed URLs
+        # This is crucial for accurate 'processed_count' in summary reports
+        for i in range(start_index_for_crawl):
+            # Create a placeholder for already processed URLs.
+            # We don't need their actual content here, just a 'success' status
+            # to keep counts accurate for the summary reports.
+            # We assume URLs up to start_index_for_crawl were counted in successful/failed_count
+            # from the loaded progress_data.
+            # Add basic info to ensure name/url are available for reports, even if dummy
+            dummy_item = url_list[i] if i < len(url_list) else {}
+            all_results.append({
+                'success': True, # Assume success for already processed for general counts
+                'batch_num': (i // batch_size) + 1,
+                'name': dummy_item.get('name', f"Dummy URL {i+1}"),
+                'url': dummy_item.get('final_url', f"dummy_url_{i+1}"),
+                'source': dummy_item.get('source', 'Previous Run'),
+                'error': None, # No error for dummy success
+                'title': 'Previously Processed'
+            })
+
+
+        print(f"✅ 从断点续传，将从第 {start_index_for_crawl + 1} 个URL开始处理。")
+        print(f"   已成功: {total_successful}, 已失败: {total_failed}")
+    else:
+        # 创建新的输出目录
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = f"crawl_results_break_{timestamp}"
+        start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        os.makedirs(output_dir, exist_ok=True)
+        # 初始化进度日志，记录开始时间
+        save_progress_log(output_dir, 0, total_urls_to_process, 0, 0, start_time=start_time, output_dir_name=output_dir)
+        print(f"🆕 未找到有效进度，将开始新的爬取并创建目录: {output_dir}")
     
-    # 分批处理URL
-    total_batches = (len(url_list) + batch_size - 1) // batch_size
     
-    for batch_num in range(total_batches):
-        start_index = batch_num * batch_size
-        end_index = min(start_index + batch_size, len(url_list))
-        current_batch_urls = url_list[start_index:end_index] # Renamed to avoid confusion with batch_results
+    # 调整起始批次号
+    current_batch_start_index = start_index_for_crawl // batch_size
+    
+    for batch_num_idx in range(current_batch_start_index, total_batches):
+        start_index = batch_num_idx * batch_size # Start index of the current *full* batch in url_list
+        end_index = min(start_index + batch_size, total_urls_to_process)
+        current_batch_urls = url_list[start_index:end_index] # URLs for the *entire* current batch
         
         print(f"\n{'='*80}")
-        print(f"🔄 处理批次 {batch_num + 1}/{total_batches}")
+        print(f"🔄 处理批次 {batch_num_idx + 1}/{total_batches}")
         print(f"📋 URL范围: {start_index + 1} - {end_index}")
-        print(f"📊 当前批次大小: {len(current_batch_urls)}")
+        print(f"📊 当前批次大小: {len(current_batch_urls)}") 
         print(f"{'='*80}")
         
-        batch_results = []
+        batch_results_current_run = [] # Collect results only for this batch in the current run
         
-        # 处理当前批次的每个URL
+        # Process every URL in the current batch (even if partially done before)
         for i, item in enumerate(current_batch_urls):
-            global_index = start_index + i + 1
+            global_index = start_index + i + 1 # Correct global index for display and tracking within this batch
+
             print(f"\n{'.'*60}")
-            print(f"处理第 {global_index}/{len(url_list)} 个URL (批次内第 {i+1}/{len(current_batch_urls)} 个)")
+            print(f"处理第 {global_index}/{total_urls_to_process} 个URL (批次内第 {i+1}/{len(current_batch_urls)} 个)")
             print(f"来源: {item.get('source', 'Unknown')}")
             print(f"名称: {item.get('name', 'Unknown')}")
             print(f"URL: {item.get('final_url', '')}")
@@ -542,9 +623,9 @@ async def crawl_multiple_webpages_to_markdown(url_list, batch_size=50):
                     'name': item.get('name', 'Unknown'),
                     'url': '',
                     'error': 'URL为空',
-                    'batch_num': batch_num + 1 # Add batch number to result
+                    'batch_num': batch_num_idx + 1 
                 }
-                batch_results.append(result)
+                batch_results_current_run.append(result)
                 total_failed += 1
                 continue
             
@@ -556,8 +637,8 @@ async def crawl_multiple_webpages_to_markdown(url_list, batch_size=50):
             
             # 添加额外信息
             result['name'] = item.get('name', 'Unknown')
-            result['batch_num'] = batch_num + 1 # Add batch number to result
-            batch_results.append(result)
+            result['batch_num'] = batch_num_idx + 1 
+            batch_results_current_run.append(result)
             
             if result['success']:
                 total_successful += 1
@@ -567,46 +648,49 @@ async def crawl_multiple_webpages_to_markdown(url_list, batch_size=50):
             # 添加延迟以避免过于频繁的请求
             await asyncio.sleep(1)
         
-        # 保存当前批次的结果
-        batch_successful = save_batch_results(batch_results, output_dir, batch_num + 1, start_index)
-        all_results.extend(batch_results) # Accumulate all results
+        # After processing all URLs in the current batch:
+        # Save current batch's results (always use start_index for batch file naming)
+        batch_successful_count = save_batch_results(batch_results_current_run, output_dir, batch_num_idx + 1, start_index)
         
-        # Update progress log
-        processed_count = end_index
-        is_final_batch = (batch_num == total_batches - 1)
+        # Extend all_results with the current batch's results
+        all_results.extend(batch_results_current_run) 
+
+        # Update progress log - END OF BATCH update
+        processed_count_after_batch = len(all_results)
+        is_final_batch = (batch_num_idx == total_batches - 1)
         current_end_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        save_progress_log(output_dir, processed_count, len(url_list), total_successful, total_failed, end_time=current_end_time_str if is_final_batch else None)
+        save_progress_log(output_dir, processed_count_after_batch, total_urls_to_process, total_successful, total_failed, end_time=current_end_time_str if is_final_batch else None, output_dir_name=output_dir)
         
         # Update overall summary (real-time progress report)
-        update_overall_summary(output_dir, all_results, total_successful, total_failed, batch_num + 1, total_batches, batch_size, start_time)
+        update_overall_summary(output_dir, all_results, total_successful, total_failed, batch_num_idx + 1, total_batches, batch_size, start_time, total_urls_to_process)
 
         # Update final summary report (cumulative report) after each batch
-        generate_final_summary_report(output_dir, all_results, total_successful, total_failed, url_list, batch_size, start_time, current_end_time_str)
+        generate_final_summary_report(output_dir, all_results, total_successful, total_failed, url_list, batch_size, start_time, current_end_time_str, total_urls_to_process)
         
-        print(f"\n📊 批次 {batch_num + 1} 完成统计:")
-        print(f"✅ 批次成功: {batch_successful}")
-        print(f"❌ 批次失败: {len(batch_results) - batch_successful}")
-        print(f"📈 总体进度: {processed_count}/{len(url_list)} ({(processed_count/len(url_list)*100):.1f}%)")
+        print(f"\n📊 批次 {batch_num_idx + 1} 完成统计:")
+        print(f"✅ 批次成功: {batch_successful_count}")
+        print(f"❌ 批次失败: {len(batch_results_current_run) - batch_successful_count}")
+        print(f"📈 总体进度: {processed_count_after_batch}/{total_urls_to_process} ({(processed_count_after_batch/total_urls_to_process*100):.1f}%)")
         print(f"📊 累计成功: {total_successful}")
         print(f"📊 累计失败: {total_failed}")
         
-        # 批次间稍作停顿
-        if batch_num < total_batches - 1:
+        # Pause between batches
+        if batch_num_idx < total_batches - 1:
             print("⏸️  批次间暂停 3 秒...")
             await asyncio.sleep(3)
     
-    # Final update to progress log and summary reports after all batches are done
+    # Final updates after all batches are done
     final_end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    save_progress_log(output_dir, len(url_list), len(url_list), total_successful, total_failed, end_time=final_end_time)
-    update_overall_summary(output_dir, all_results, total_successful, total_failed, total_batches, total_batches, batch_size, start_time)
-    generate_final_summary_report(output_dir, all_results, total_successful, total_failed, url_list, batch_size, start_time, final_end_time) # Final call for the final report
+    save_progress_log(output_dir, total_urls_to_process, total_urls_to_process, total_successful, total_failed, end_time=final_end_time, output_dir_name=output_dir)
+    update_overall_summary(output_dir, all_results, total_successful, total_failed, total_batches, total_batches, batch_size, start_time, total_urls_to_process)
+    generate_final_summary_report(output_dir, all_results, total_successful, total_failed, url_list, batch_size, start_time, final_end_time, total_urls_to_process)
 
     print(f"\n🎉 批量爬取全部完成！")
     print(f"📊 最终统计:")
-    print(f"   总数量: {len(url_list)}")
+    print(f"   总数量: {total_urls_to_process}")
     print(f"   ✅ 成功: {total_successful}")
     print(f"   ❌ 失败: {total_failed}")
-    print(f"   📈 成功率: {(total_successful/len(url_list)*100):.2f}%")
+    print(f"   📈 成功率: {(total_successful/total_urls_to_process*100):.2f}%")
     print(f"   🗂️  批次数: {total_batches}")
     print(f"📁 结果保存在目录: {output_dir}")
     print(f"📄 总体汇总文件: {os.path.join(output_dir, '00_OVERALL_SUMMARY.md')}")
@@ -627,7 +711,7 @@ async def main():
     主函数，执行批量爬取任务
     """
     # 从JSON文件获取URLs
-    json_file_path = 'jyxx_final_urls.json'
+    json_file_path = 'jyjg_final_urls.json'
     jyxx_urls = get_urls(json_file_path)
 
     example_urls = [

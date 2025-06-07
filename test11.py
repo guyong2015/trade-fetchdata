@@ -196,7 +196,7 @@ def save_progress_log(output_dir, processed_count, total_count, successful_count
         failed_count: 截至目前失败的URL总数
         start_time: 爬取任务开始时间
         end_time: 爬取任务结束时间 (如果已完成)
-        output_dir_name: 结果输出目录的名称 (例如: crawl_results_20240101_120000)
+        output_dir_name: 结果输出目录的名称 (例如: crawl_results_break_20240101_120000)
     """
     progress_file = os.path.join(output_dir, "progress_log.json")
     
@@ -234,7 +234,7 @@ def save_progress_log(output_dir, processed_count, total_count, successful_count
     with open(progress_file, "w", encoding="utf-8") as f:
         json.dump(progress_data, f, ensure_ascii=False, indent=2)
 
-def load_progress_log(output_dir_prefix="crawl_results_"):
+def load_progress_log(output_dir_prefix="crawl_results_break"):
     """
     加载最新的进度日志。
     查找最近创建的且未完成的爬取目录及其进度日志。
@@ -580,7 +580,7 @@ async def crawl_multiple_webpages_to_markdown(url_list, batch_size=50):
     else:
         # 创建新的输出目录
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = f"crawl_results_{timestamp}"
+        output_dir = f"crawl_results_break_{timestamp}"
         start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         os.makedirs(output_dir, exist_ok=True)
         # 初始化进度日志，记录开始时间
@@ -711,7 +711,7 @@ async def main():
     主函数，执行批量爬取任务
     """
     # 从JSON文件获取URLs
-    json_file_path = 'jyxx_final_urls.json'
+    json_file_path = 'jyjg_final_urls.json'
     jyxx_urls = get_urls(json_file_path)
 
     example_urls = [
